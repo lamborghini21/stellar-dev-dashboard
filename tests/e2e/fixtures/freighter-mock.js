@@ -22,15 +22,15 @@ window.mockWalletAdapter = {
   },
   simulateAccountChange(newPublicKey) {
     this.setState({ publicKey: newPublicKey });
-    window.dispatchEvent(new CustomEvent('walletAccountChange', { detail: newPublicKey }));
+    window.dispatchEvent(new CustomEvent('freighterAccountChange', { detail: newPublicKey }));
   },
   simulateNetworkChange(newNetwork, newNetworkUrl = 'https://horizon-mock.stellar.org') {
     this.setState({ network: newNetwork, networkUrl: newNetworkUrl });
-    window.dispatchEvent(new CustomEvent('walletNetworkChange', { detail: newNetwork }));
+    window.dispatchEvent(new CustomEvent('freighterNetworkChange', { detail: newNetwork }));
   },
   simulateLock() {
     this.setState({ isLocked: true });
-    window.dispatchEvent(new CustomEvent('walletLock'));
+    window.dispatchEvent(new CustomEvent('freighterLock'));
   },
   rejectNextConnect() {
     this.setState({ rejectNextConnect: true });

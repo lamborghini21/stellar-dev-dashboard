@@ -12,12 +12,28 @@ test.describe('Wallet Adapter Flows', () => {
     // Inject the mock script before any page loads
     await page.addInitScript({ path: freighterMockPath });
 
+    // Skip the onboarding tour and record a reviewed (declined) analytics choice
+    // so neither overlay covers the wallet connect screen.
+    await page.addInitScript(() => {
+      localStorage.setItem('hasCompletedOnboarding', 'true');
+      localStorage.setItem('tutorial_onboarding', JSON.stringify({ dismissedWelcome: true }));
+      localStorage.setItem(
+        'user-preferences',
+        JSON.stringify({
+          analyticsConsent: false,
+          diagnosticsConsent: false,
+          analyticsConsentPolicyVersion: '1',
+          analyticsConsentReviewedVersion: '1',
+        })
+      );
+    });
+
     // Mock Horizon API calls to avoid hitting real network
     await page.route('**/accounts/*', async (route) => {
       await route.fulfill({
         status: 200,
         json: {
-          account_id: 'GA1234567890MOCKWALLETPUBLICKEY1234567890',
+          account_id: 'GBTRHGO73LJZ6BST3MIFJNKZZVVNCNYCM4U5N4M47OOJYEG3QEOY4NS3',
           balances: [{ asset_type: 'native', balance: '10000.0000000' }],
           sequence: '1',
         },
@@ -43,29 +59,39 @@ test.describe('Wallet Adapter Flows', () => {
         await route.continue();
       }
     });
+
+    await page.goto('/connect');
+    const skipTour = page.getByRole('button', { name: 'Skip tour', exact: true });
+    if (await skipTour.isVisible().catch(() => false)) {
+      await skipTour.click();
+    }
+
+    await page.getByLabel('Stellar account address').fill(
+      'GBTRHGO73LJZ6BST3MIFJNKZZVVNCNYCM4U5N4M47OOJYEG3QEOY4NS3'
+    );
+    await page.getByRole('button', { name: 'Connect to Stellar account' }).press('Enter');
+    await expect(page).toHaveURL(/\/overview$/);
+
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/wallet');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page).toHaveURL(/\/wallet$/);
   });
 
   test('primary flow: connect successfully', async ({ page }) => {
-    await page.goto('/');
-
-    // Connect Wallet button usually appears or we go to a specific view
-    // The previous tests indicate clicking 'Connect' or selecting Freighter
-
-    // In WalletConnect, it lists wallets. Click Freighter
     const connectFreighterBtn = page.getByRole('button', { name: /Freighter/i });
     await expect(connectFreighterBtn).toBeVisible();
     await connectFreighterBtn.click();
 
     // Wait for the success state showing the mock public key
-    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890')).toBeVisible({
+    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890', { exact: true })).toBeVisible({
       timeout: 10000,
     });
     await expect(page.getByText(/Freighter Connected/i)).toBeVisible();
   });
 
   test('failure case: user rejects connection', async ({ page }) => {
-    await page.goto('/');
-
     // Set the mock to reject next connection
     await page.evaluate(() => {
       window.mockWalletAdapter.rejectNextConnect();
@@ -75,12 +101,10 @@ test.describe('Wallet Adapter Flows', () => {
     await connectFreighterBtn.click();
 
     // The error should be displayed on screen
-    await expect(page.getByText('User declined access.')).toBeVisible();
+    await expect(page.getByText('Freighter connection failed: User declined access.', { exact: true })).toBeVisible();
   });
 
   test('failure case: freighter is locked', async ({ page }) => {
-    await page.goto('/');
-
     // Lock the mock
     await page.evaluate(() => {
       window.mockWalletAdapter.simulateLock();
@@ -89,15 +113,38 @@ test.describe('Wallet Adapter Flows', () => {
     const connectFreighterBtn = page.getByRole('button', { name: /Freighter/i });
     await connectFreighterBtn.click();
 
-    await expect(page.getByText(/Freighter is locked/i)).toBeVisible();
+    await expect(page.getByText('Freighter connection failed: Freighter is locked. Please unlock it.', { exact: true })).toBeVisible();
+  });
+
+  test('recovery: unlocks and reconnects after an active session is locked', async ({ page }) => {
+    await page.getByRole('button', { name: /Freighter/i }).click();
+    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890', { exact: true })).toBeVisible();
+
+    await page.evaluate(() => window.mockWalletAdapter.simulateLock());
+    await expect(page.getByRole('status').filter({ hasText: /locked the wallet session/i })).toContainText(/locked the wallet session/i);
+
+    await page.evaluate(() => window.mockWalletAdapter.resetThreatSimulation());
+    await page.getByRole('button', { name: /Freighter/i }).click();
+    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890', { exact: true })).toBeVisible();
+  });
+
+  test('recovery: handles extension removal and reconnects after it returns', async ({ page }) => {
+    const connectFreighterBtn = page.getByRole('button', { name: /Freighter/i });
+    await connectFreighterBtn.click();
+    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890', { exact: true })).toBeVisible();
+
+    await page.evaluate(() => window.mockWalletAdapter.simulateUnsupportedEnvironment());
+    await expect(page.getByRole('status').filter({ hasText: /no longer available/i })).toContainText(/no longer available/i, { timeout: 8000 });
+
+    await page.evaluate(() => window.mockWalletAdapter.resetThreatSimulation());
+    await page.getByRole('button', { name: /Freighter/i }).click();
+    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890', { exact: true })).toBeVisible();
   });
 
   test('boundary case: network change', async ({ page }) => {
-    await page.goto('/');
-
     const connectFreighterBtn = page.getByRole('button', { name: /Freighter/i });
     await connectFreighterBtn.click();
-    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890')).toBeVisible();
+    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890', { exact: true })).toBeVisible();
 
     // Trigger network change
     await page.evaluate(() => {
@@ -112,8 +159,6 @@ test.describe('Wallet Adapter Flows', () => {
   });
 
   test('boundary case: account change', async ({ page }) => {
-    await page.goto('/');
-
     const connectFreighterBtn = page.getByRole('button', { name: /Freighter/i });
     await connectFreighterBtn.click();
 
@@ -129,8 +174,6 @@ test.describe('Wallet Adapter Flows', () => {
   test('threat model: wallet spoofing - rejects invalid or spoofed public key', async ({
     page,
   }) => {
-    await page.goto('/');
-
     // Simulate extension injecting spoofed public key
     await page.evaluate(() => {
       window.mockWalletAdapter.simulateSpoofedPublicKey('MALICIOUS_SPOOFED_ADDRESS_SCRIPT');
@@ -140,15 +183,13 @@ test.describe('Wallet Adapter Flows', () => {
     await connectFreighterBtn.click();
 
     // Verify error is caught and displayed cleanly
-    await expect(page.getByText(/invalid or spoofed public key/i)).toBeVisible();
+    await expect(page.getByText('Freighter connection failed: Freighter returned an invalid or spoofed public key.', { exact: true })).toBeVisible();
   });
 
   test('threat model: network mismatch boundary case', async ({ page }) => {
-    await page.goto('/');
-
     const connectFreighterBtn = page.getByRole('button', { name: /Freighter/i });
     await connectFreighterBtn.click();
-    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890')).toBeVisible();
+    await expect(page.getByText('GA1234567890MOCKWALLETPUBLICKEY1234567890', { exact: true })).toBeVisible();
 
     // Simulate extension switching to PUBLIC network while dashboard is on testnet
     await page.evaluate(() => {
@@ -160,8 +201,6 @@ test.describe('Wallet Adapter Flows', () => {
   });
 
   test('threat model: unsupported environment handling', async ({ page }) => {
-    await page.goto('/');
-
     // Simulate extension being absent
     await page.evaluate(() => {
       window.mockWalletAdapter.simulateUnsupportedEnvironment();
@@ -171,6 +210,6 @@ test.describe('Wallet Adapter Flows', () => {
     await connectFreighterBtn.click();
 
     // Verify clear installation guidance is shown
-    await expect(page.getByText(/not installed|https:\/\/freighter\.app/i)).toBeVisible();
+    await expect(page.getByText('Freighter wallet extension is not installed. Please install it from https://freighter.app', { exact: true })).toBeVisible();
   });
 });

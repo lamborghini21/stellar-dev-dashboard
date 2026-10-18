@@ -1,9 +1,9 @@
 import * as StellarSdk from '@stellar/stellar-sdk'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getWalletAdapter } from '../adapters'
-import { __resetFreighterApiCacheForTests } from '../freighter'
 
 const TESTNET_PASSPHRASE = StellarSdk.Networks.TESTNET
+const TEST_PUBLIC_KEY = 'GDIAJT7B5NV3UYUEYQI4H6OZHTJKHMTVYYWNEXETKOPA6OHW74PWSHOD'
 
 function makeUnsignedXdr() {
   const source = StellarSdk.Keypair.random()
@@ -25,8 +25,8 @@ describe('wallet adapters', () => {
   const signTransaction = vi.fn(async (xdr: string) => ({ signedTxXdr: `${xdr}-signed` }))
   const freighterApi = {
     isConnected: vi.fn(async () => ({ isConnected: true })),
-    requestAccess: vi.fn(async () => ({ address: 'GTESTADDRESS' })),
-    getAddress: vi.fn(async () => ({ address: 'GTESTADDRESS' })),
+    requestAccess: vi.fn(async () => ({ address: TEST_PUBLIC_KEY })),
+    getAddress: vi.fn(async () => ({ address: TEST_PUBLIC_KEY })),
     getNetwork: vi.fn(async () => ({ network: 'TESTNET' })),
     signTransaction,
   }
@@ -35,7 +35,6 @@ describe('wallet adapters', () => {
     delete (window as any).freighterApi
     freighterApi.getNetwork.mockResolvedValue({ network: 'TESTNET' })
     vi.clearAllMocks()
-    __resetFreighterApiCacheForTests()
   })
 
   it('connects and signs through the common adapter interface', async () => {
@@ -45,7 +44,7 @@ describe('wallet adapters', () => {
     const xdr = makeUnsignedXdr()
     const signed = await adapter.signTransaction(xdr, 'testnet')
 
-    expect(connection).toMatchObject({ publicKey: 'GTESTADDRESS', network: 'testnet' })
+    expect(connection).toMatchObject({ publicKey: TEST_PUBLIC_KEY, network: 'testnet' })
     expect(signed).toBe(`${xdr}-signed`)
     expect(signTransaction).toHaveBeenCalledOnce()
   })

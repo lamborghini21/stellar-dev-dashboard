@@ -116,6 +116,7 @@ export function startWalletSessionListeners(): () => void {
   cleanups.push(
     subscribeFreighterSession({
       onLock: () => revokeSession('wallet_locked'),
+      onUnavailable: () => revokeSession('wallet_unavailable'),
       onDisconnect: () => revokeSession('wallet_disconnected'),
       onAccountChange: handleAccountChange,
       onNetworkChange: handleNetworkChange,

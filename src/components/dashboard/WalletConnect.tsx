@@ -369,6 +369,7 @@ export default function WalletConnect() {
     walletConnected,
     walletType,
     walletPublicKey,
+    walletSessionRevokedReason,
     setWalletConnected,
     disconnectWallet,
     setConnectedAddress,
@@ -600,6 +601,22 @@ export default function WalletConnect() {
     <Card title="Connect Wallet" subtitle="Software, mobile, hardware, and WalletConnect v2">
       <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <SecurityBadge posture={posture} />
+
+        {walletSessionRevokedReason === 'wallet_locked' && (
+          <div role="status" aria-live="polite" style={{ padding: '12px', background: 'var(--amber-glow)', border: '1px solid var(--amber)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.5 }}>
+            Freighter locked the wallet session. Unlock it in the extension, then reconnect below.
+          </div>
+        )}
+        {walletSessionRevokedReason === 'wallet_unavailable' && (
+          <div role="status" aria-live="polite" style={{ padding: '12px', background: 'var(--amber-glow)', border: '1px solid var(--amber)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.5 }}>
+            Freighter is no longer available. It may have been removed, disabled, or blocked. Re-enable or install the extension, refresh this page if needed, then reconnect below.
+          </div>
+        )}
+        {walletSessionRevokedReason === 'wallet_disconnected' && (
+          <div role="status" aria-live="polite" style={{ padding: '12px', background: 'var(--amber-glow)', border: '1px solid var(--amber)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '12px', lineHeight: 1.5 }}>
+            Freighter disconnected the wallet session. Reconnect below to continue.
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {SOFTWARE_WALLETS.map((wallet) => (

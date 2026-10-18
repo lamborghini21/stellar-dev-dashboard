@@ -9,7 +9,6 @@ import {
   subscribeFreighterSession,
   connectFreighter,
   signTransactionWithFreighter,
-  __resetFreighterApiCacheForTests,
 } from '../../../../src/lib/wallet/freighter.js';
 
 const VALID_KEY = 'GBTRHGO73LJZ6BST3MIFJNKZZVVNCNYCM4U5N4M47OOJYEG3QEOY4NS3';
@@ -28,7 +27,6 @@ describe('freighter connector', () => {
 
   afterEach(() => {
     delete window.freighterApi;
-    __resetFreighterApiCacheForTests();
     vi.restoreAllMocks();
   });
 
@@ -86,7 +84,6 @@ describe('freighter connector', () => {
 
   it('unsupported environment: throws clear installation link when extension is missing', async () => {
     delete window.freighterApi;
-    __resetFreighterApiCacheForTests();
 
     await expect(connectFreighter()).rejects.toThrowError(
       /not installed.*https:\/\/freighter\.app/i
@@ -147,9 +144,11 @@ describe('freighter connector', () => {
     cleanup();
   });
 
-  it('reports disconnect when Freighter is no longer available', async () => {
+  it('reports unavailable when Freighter is removed while a session is monitored', async () => {
+    const onUnavailable = vi.fn();
     const onDisconnect = vi.fn();
     const cleanup = subscribeFreighterSession({
+      onUnavailable,
       onDisconnect,
       pollIntervalMs: 20,
     });
@@ -157,15 +156,32 @@ describe('freighter connector', () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
 
     delete window.freighterApi;
-    __resetFreighterApiCacheForTests();
 
     await vi.waitFor(
       () => {
-        expect(onDisconnect).toHaveBeenCalled();
+        expect(onUnavailable).toHaveBeenCalled();
       },
       { timeout: 200 }
     );
 
+    expect(onDisconnect).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('reports unavailable when the extension bridge is invalidated', async () => {
+    const onUnavailable = vi.fn();
+    const onDisconnect = vi.fn();
+    window.freighterApi.isAllowed = vi.fn(async () => {
+      throw new Error('Extension context invalidated.');
+    });
+
+    const cleanup = subscribeFreighterSession({ onUnavailable, onDisconnect, pollIntervalMs: 20 });
+
+    await vi.waitFor(() => {
+      expect(onUnavailable).toHaveBeenCalled();
+    });
+
+    expect(onDisconnect).not.toHaveBeenCalled();
     cleanup();
   });
 });

@@ -140,6 +140,7 @@ export default function DashboardLayout() {
   const routeMatch = React.useMemo(() => matchRoute(location.pathname), [location.pathname]);
   const activeRoute = routeMatch?.route ?? null;
   const isConnectRoute = location.pathname === '/connect';
+  const isWalletRoute = routeMatch?.route.id === 'wallet';
   const lastSyncedPath = React.useRef<string | null>(null);
 
   // URL → store: sync the active tab and any entity path param when the URL changes.
@@ -186,13 +187,13 @@ export default function DashboardLayout() {
         ? routeMatch.params[routeMatch.route.param.name]
         : undefined;
 
-    if (!address && !isConnectRoute && !addressParam) {
+    if (!address && !isConnectRoute && !addressParam && !isWalletRoute) {
       navigate('/connect', { replace: true });
     } else if (address && isConnectRoute) {
       const target = routeMatch?.route.id ?? useStore.getState().activeTab;
       navigate(buildPath(target), { replace: true });
     }
-  }, [routeMatch, isConnectRoute, navigate, connectedAddress]);
+  }, [routeMatch, isConnectRoute, isWalletRoute, navigate, connectedAddress]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -425,7 +426,7 @@ export default function DashboardLayout() {
             </div>
           )}
           <ErrorBoundary onRetry={handleRetry} maxRetries={2}>
-            {!connectedAddress ? (
+            {!connectedAddress && !isWalletRoute ? (
               <ConnectPanel />
             ) : isConnectRoute ? null : isNotFound ? (
               <NotFound />

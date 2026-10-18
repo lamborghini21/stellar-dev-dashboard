@@ -5,19 +5,9 @@
 
 const _FREIGHTER_API_URL = 'https://cdn.jsdelivr.net/npm/@stellar/freighter-api/dist/index.min.js';
 
-let freighterApi = null;
-
-export function __resetFreighterApiCacheForTests() {
-  freighterApi = null;
-}
-
 async function getFreighterApi() {
-  if (freighterApi) return freighterApi;
-  if (typeof window !== 'undefined' && window.freighterApi) {
-    freighterApi = window.freighterApi;
-    return freighterApi;
-  }
-  return null;
+  if (typeof window === 'undefined') return null;
+  return window.freighterApi || null;
 }
 
 export async function isFreighterInstalled() {
@@ -196,12 +186,15 @@ export function onFreighterLock(callback) {
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
+const PROVIDER_TEARDOWN_PATTERN =
+  /extension context invalidated|receiving end does not exist|message port closed|extension (?:is )?(?:unavailable|removed)/i;
 
 /**
  * Poll Freighter for lock, disconnect, account, and network changes.
  * Supplements custom DOM events for environments where Freighter does not emit them.
  * @param {object} [options]
  * @param {() => void} [options.onLock]
+ * @param {() => void} [options.onUnavailable]
  * @param {() => void} [options.onDisconnect]
  * @param {(publicKey: string) => void} [options.onAccountChange]
  * @param {(network: string) => void} [options.onNetworkChange]
@@ -209,6 +202,7 @@ const DEFAULT_POLL_INTERVAL_MS = 5000;
  */
 export function subscribeFreighterSession({
   onLock,
+  onUnavailable,
   onDisconnect,
   onAccountChange,
   onNetworkChange,
@@ -227,12 +221,26 @@ export function subscribeFreighterSession({
 
     const api = await getFreighterApi();
     if (!api) {
-      onDisconnect?.();
+      if (onUnavailable) {
+        onUnavailable();
+      } else {
+        onDisconnect?.();
+      }
       return;
     }
 
     try {
-      const allowed = await isFreighterAllowed();
+      let allowed = null;
+      if (typeof api.isAllowed === 'function') {
+        try {
+          const result = await api.isAllowed();
+          allowed = result?.isAllowed === true;
+        } catch (allowedError) {
+          const allowedMessage = allowedError instanceof Error ? allowedError.message : String(allowedError);
+          if (PROVIDER_TEARDOWN_PATTERN.test(allowedMessage)) throw allowedError;
+          allowed = false;
+        }
+      }
       if (allowed === false) {
         onLock?.();
         return;
@@ -262,8 +270,16 @@ export function subscribeFreighterSession({
       if (network) {
         lastNetwork = network;
       }
-    } catch {
-      onDisconnect?.();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        onUnavailable &&
+        PROVIDER_TEARDOWN_PATTERN.test(message)
+      ) {
+        onUnavailable();
+      } else {
+        onDisconnect?.();
+      }
     }
   };
 

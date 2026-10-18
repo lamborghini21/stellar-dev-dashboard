@@ -34,7 +34,10 @@ vi.mock('../../../../src/lib/wallet/freighter', () => ({
     window.__networkChangeCallback = callback
     return () => {}
   }),
-  subscribeFreighterSession: vi.fn(() => () => {}),
+  subscribeFreighterSession: vi.fn((options) => {
+    window.__sessionOptions = options
+    return () => {}
+  }),
   normalizeFreighterNetwork: vi.fn((network) => {
     if (network === 'TESTNET') return 'testnet'
     if (network === 'PUBLIC') return 'mainnet'
@@ -70,6 +73,18 @@ describe('wallet session listeners', () => {
     expect(state.connectedAddress).toBeNull()
     expect(state.accountData).toBeNull()
     expect(state.walletSessionRevokedReason).toBe('wallet_locked')
+  })
+
+  it('clears an active wallet session when the extension becomes unavailable', () => {
+    startWalletSessionListeners()
+    window.__sessionOptions.onUnavailable()
+
+    const state = useStore.getState()
+    expect(state.walletConnected).toBe(false)
+    expect(state.walletPublicKey).toBeNull()
+    expect(state.connectedAddress).toBeNull()
+    expect(state.accountData).toBeNull()
+    expect(state.walletSessionRevokedReason).toBe('wallet_unavailable')
   })
 
   it('reloads account data when the active account changes', async () => {

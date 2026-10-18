@@ -27,6 +27,7 @@ Each failure lists:
 |---|---|---|---|
 | Not installed | `Freighter is not installed` / `Freighter wallet not found` | The extension is missing, disabled, blocked, or not injected into the page. | Install from [https://freighter.app](https://freighter.app), then refresh. Disable any privacy blocking, and confirm the extension is enabled for this site. |
 | Locked | `Freighter is locked` | The wallet session is locked and cannot sign or expose the account. | Open Freighter and unlock it, then reconnect from the dashboard. |
+| Extension unavailable | The dashboard reports that Freighter is no longer available. | The extension was removed, disabled, blocked, or stopped injecting its API. The active wallet session and cached account data are cleared. | Re-enable or install Freighter, refresh the page if its API is not reinjected, then reconnect from the wallet screen. |
 | Access denied | `User declined access` | The user dismissed or rejected the access request in the Freighter popup. | Click the wallet button again and **approve** the request. If no popup appears, check that popups are not blocked. |
 | Network mismatch | `You must first turn off account network` / `network` | The network selected in Freighter differs from the one the dashboard is using. | Open the Freighter network selector and match it to the dashboard network (Testnet or Mainnet), then reconnect. |
 | Invalid response | `Failed to get public key` / `Failed to sign` | Freighter could not return a valid address or signature (e.g. no active account). | Confirm an account is funded and selected in Freighter on the target network, then retry. |
@@ -37,6 +38,12 @@ The primary flow is considered healthy when Freighter returns a valid `G...`
 public key and the account loads on the selected network. If the extension is
 present but reports `isConnected: false`, treat it as **not installed / not
 allowed** and follow the installed remediation above.
+
+The dashboard monitors the injected provider while the page is open. If Freighter
+locks, disconnects, disappears, or its extension bridge is invalidated, the active session is revoked and a
+polite screen-reader status message explains how to reconnect. Revocation clears
+the dashboard's in-memory public account data; secret keys are never held by the
+dashboard. Detection uses the existing provider poll and adds no network requests.
 
 ## 2. Ledger (hardware)
 
